@@ -16,7 +16,7 @@ import os
 # opencvをインポートする前にこの処理を加えると起動が早くなる
 os.environ["OPENCV_VIDEOIO_MSMF_ENABLE_HW_TRANSFORMS"] = "0"
 import sys, cv2
-import time, ctypes
+import time, Img
 import numpy as np
 sys.path.append(".")
 
@@ -31,7 +31,7 @@ import OpenRTM_aist
 camera_id = 0
 shooting = False
 cam = 0  # カメラ用インタスタンス
-frame = edit_frame = 0 
+frame =  0 
 
 
 # Import Service implementation class
@@ -257,7 +257,7 @@ class usbCameraRTC_hand_py(OpenRTM_aist.DataFlowComponentBase):
     #
     def onExecute(self, ec_id):
 
-        global cam, shooting, camera_id, frame, edit_frame
+        global cam, shooting, camera_id, frame
 
         # 撮影コマンドの受信
         if self._shootCmdIn.isNew():
@@ -271,36 +271,29 @@ class usbCameraRTC_hand_py(OpenRTM_aist.DataFlowComponentBase):
                 img = cam.read()
 
             # 撮影
-            frame  = cam.read(camera_id)
+            ret, frame  = cam.read(camera_id)
 
-            # 画像記述の変数を宣言する
-            Width = ctypes.c_long()
-            Height = ctypes.c_long()
-            BitsPerPixel = ctypes.c_int()
-            colorformat = ctypes.c_int()
+            if ret:
+                cv2.imwrite("capture.jpg", frame)
+                frame = cv2.imread("capture.jpg")
 
-            # バッファサイズを計算
-            bpp = int(BitsPerPixel.value / 8.0)
-            buffer_size = Width.value * Height.value * bpp
+                # 出力データポートの設定
+                self._d_image.format = Img.RGB
+                self._d_image.height = 720
+                self._d_image.width = 1280
+                self._d_image.bpp = 24
+                self._d_image.raw_data = frame.tobytes()
 
-            # 出力データポートの設定
-            self._d_image.height = RESOL_PX_H
-            self._d_image.width = RESOL_PX_W
-            print("A")
-            self._d_image.bpp = bpp
-            print("C")
-            self._d_image.pixels = buffer_size
-            print("D")
+                self._imageOut.write()
 
-            self._imageOut.write()
-            print("E")
-
-            # cv2.imwrite("capture.jpg", frame)
+            else:
+                print("capture error")
+                return RTC.RTC_ERROR
 
             # 変数リセット
             shooting = False
 
-            print("send image")
+            print("send image\n")
 
         # フォーカス値の更新
         if self._focusIn.isNew():
